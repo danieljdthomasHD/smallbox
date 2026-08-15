@@ -193,11 +193,14 @@ export function toPlace(
   }
 
   const openingHours = tags.opening_hours;
+  const ref = `${element.type}/${element.id}`;
+  const url = `https://www.openstreetmap.org/${ref}`;
 
   return {
-    id: `osm:${element.type}/${element.id}`,
+    id: `osm:${ref}`,
     name,
     category,
+    kind: "permanent",
     lat,
     lon,
     distance: haversine(centerLat, centerLon, lat, lon),
@@ -209,10 +212,13 @@ export function toPlace(
     // local timezone, which is much closer to the shop's.
     openState: evaluateHours(openingHours),
     organic: tags.organic === "yes" || tags.organic === "only",
+    description: tags.description,
     tags: surfaced,
     independence: assessIndependence(tags),
+    confidence: "verified",
+    sources: [{ source: "osm", ref, url }],
     source: "osm",
-    sourceUrl: `https://www.openstreetmap.org/${element.type}/${element.id}`,
+    sourceUrl: url,
   };
 }
 

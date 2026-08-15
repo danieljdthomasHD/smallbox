@@ -1,14 +1,24 @@
 "use client";
 
+import { useState } from "react";
+
+import {
+  ConfidenceBadge,
+  SourceList,
+  confidenceExplanation,
+} from "@/components/Provenance";
 import { CATEGORIES } from "@/lib/categories";
 import { formatDistance } from "@/lib/geo";
 import { humanizeHours } from "@/lib/hours";
+import { formatOccurrence, upcomingOccurrences } from "@/lib/occurrences";
 import type { OpenState, Place } from "@/lib/types";
 
 interface PlaceDetailProps {
   place: Place;
   openState: OpenState;
   onClose: () => void;
+  /** Available only when the submissions database is reachable. */
+  canReport: boolean;
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -20,10 +30,48 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export default function PlaceDetail({ place, openState, onClose }: PlaceDetailProps) {
+type ReportKind = "independent" | "chain" | "closed";
+
+const REPORTS: { kind: ReportKind; label: string; done: string }[] = [
+  { kind: "independent", label: "It's independent", done: "Marked as independent" },
+  { kind: "chain", label: "It's a chain", done: "Marked as a chain" },
+  { kind: "closed", label: "It's closed", done: "Reported as closed" },
+];
+
+export default function PlaceDetail({
+  place,
+  openState,
+  onClose,
+  canReport,
+}: PlaceDetailProps) {
   const def = CATEGORIES[place.category];
   const hours = humanizeHours(place.openingHours);
   const directions = `https://www.openstreetmap.org/directions?to=${place.lat}%2C${place.lon}`;
+  const upcoming = upcomingOccurrences(place.occurrences);
+  const approximate = place.tags.location_approximate === "yes";
+
+  const [reported, setReported] = useState<string | null>(null);
+  const [reporting, setReporting] = useState(false);
+
+  async function report(kind: ReportKind, done: string) {
+    setReporting(true);
+    try {
+      const response = await fetch("/api/submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kindOfReport: kind,
+          correctsPlaceId: place.id,
+          name: place.name,
+        }),
+      });
+      setReported(response.ok ? done : "Couldn't save that — try again.");
+    } catch {
+      setReported("Couldn't save that — try again.");
+    } finally {
+      setReporting(false);
+    }
+  }
 
   return (
     <aside className="flex h-full flex-col overflow-hidden bg-surface">
@@ -38,6 +86,7 @@ export default function PlaceDetail({ place, openState, onClose }: PlaceDetailPr
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-base font-semibold">{place.name}</h2>
           <p className="text-xs text-muted">
+            {place.kind === "popup" ? "Pop-up · " : ""}
             {def.singular} · {formatDistance(place.distance)} away
           </p>
         </div>
@@ -52,17 +101,53 @@ export default function PlaceDetail({ place, openState, onClose }: PlaceDetailPr
       </header>
 
       <div className="scroll-thin flex-1 overflow-y-auto px-4 py-3">
-        {place.address && <Row label="Address">{place.address}</Row>}
+        {place.confidence !== "verified" && (
+          <div className="mb-3 rounded-lg border border-edge bg-surface-muted p-2.5">
+            <ConfidenceBadge confidence={place.confidence} />
+            <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
+              {confidenceExplanation(place.confidence)}
+            </p>
+          </div>
+        )}
+
+        {upcoming.length > 0 && (
+          <div className="mb-3 rounded-lg border border-accent/40 bg-accent-soft/40 p-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-accent">
+              Upcoming dates
+            </h3>
+            <ul className="mt-1.5 space-y-1 text-sm">
+              {upcoming.slice(0, 6).map((occurrence) => (
+                <li key={`${occurrence.start}-${occurrence.end ?? ""}`}>
+                  {formatOccurrence(occurrence)}
+                  {occurrence.note && (
+                    <span className="text-muted"> · {occurrence.note}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {place.description && (
+          <p className="mb-2 text-sm leading-relaxed">{place.description}</p>
+        )}
+
+        {place.address && (
+          <Row label="Address">
+            {place.address}
+            {approximate && (
+              <span className="block text-[11px] text-muted">
+                Approximate — pin placed from a text description.
+              </span>
+            )}
+          </Row>
+        )}
 
         {hours && (
           <Row label="Hours">
             <span className="block">{hours}</span>
             {openState !== "unknown" && (
-              <span
-                className={
-                  openState === "open" ? "text-accent" : "text-muted"
-                }
-              >
+              <span className={openState === "open" ? "text-accent" : "text-muted"}>
                 {openState === "open" ? "Open right now" : "Closed right now"}
               </span>
             )}
@@ -90,8 +175,6 @@ export default function PlaceDetail({ place, openState, onClose }: PlaceDetailPr
           </Row>
         )}
 
-        {place.tags.description && <Row label="About">{place.tags.description}</Row>}
-
         <div className="mt-3 rounded-lg border border-edge bg-surface-muted p-3">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
@@ -116,11 +199,44 @@ export default function PlaceDetail({ place, openState, onClose }: PlaceDetailPr
               <li key={reason}>· {reason}</li>
             ))}
           </ul>
-          <p className="mt-2 text-[11px] leading-relaxed text-muted">
-            This is a guess from OpenStreetMap tags, not a verified fact. If it
-            looks wrong, the listing itself can be corrected on OSM.
-          </p>
         </div>
+
+        <div className="mt-3 rounded-lg border border-edge p-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+            Sources
+          </h3>
+          <div className="mt-2">
+            <SourceList sources={place.sources} />
+          </div>
+        </div>
+
+        {canReport && (
+          <div className="mt-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+              Something wrong?
+            </h3>
+            {reported ? (
+              <p className="mt-2 text-xs text-accent">{reported} — thank you.</p>
+            ) : (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {REPORTS.map(({ kind, label, done }) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    disabled={reporting}
+                    onClick={() => report(kind, done)}
+                    className="rounded-lg border border-edge px-2.5 py-1 text-xs hover:bg-surface-muted disabled:opacity-50"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="mt-2 text-[11px] leading-relaxed text-muted">
+              Reports override the automatic guess for everyone using this app.
+            </p>
+          </div>
+        )}
 
         <div className="mt-3 flex flex-wrap gap-2">
           <a
@@ -138,7 +254,7 @@ export default function PlaceDetail({ place, openState, onClose }: PlaceDetailPr
               rel="noreferrer noopener"
               className="rounded-lg border border-edge px-3 py-1.5 text-sm hover:bg-surface-muted"
             >
-              {place.source === "usda" ? "USDA listing" : "View on OSM"}
+              View source
             </a>
           )}
         </div>

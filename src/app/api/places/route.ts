@@ -2,16 +2,96 @@ import { NextResponse } from "next/server";
 
 import { isCategoryId } from "@/lib/categories";
 import { penalizeRepeatedNames } from "@/lib/chains";
+import { findCorrections } from "@/lib/db";
 import { clampRadius, isValidLatLon } from "@/lib/geo";
-import { elementsToPlaces, fetchOverpass } from "@/lib/overpass";
-import { fetchUsdaMarkets } from "@/lib/usda";
-import type { CategoryId, Place, PlacesResponse } from "@/lib/types";
+import { reverseGeocode } from "@/lib/geocode";
+import { mergePlaces } from "@/lib/merge";
+import { gather } from "@/lib/sources/registry";
+import type { CategoryId, Place, PlacesResponse, SourceId } from "@/lib/types";
 
 export const runtime = "nodejs";
-// Overpass is slow and its data changes on the order of days, not seconds.
+// Slow: several upstream services plus, when configured, a model call.
+export const maxDuration = 60;
 export const revalidate = 0;
 
 const MAX_RESULTS = 300;
+
+const KNOWN_SOURCES: SourceId[] = [
+  "osm",
+  "usda",
+  "google",
+  "news",
+  "events",
+  "community",
+];
+
+function isSourceId(value: string): value is SourceId {
+  return (KNOWN_SOURCES as string[]).includes(value);
+}
+
+/**
+ * Apply community corrections to automated listings.
+ *
+ * Someone reporting "this is actually a chain" or "this closed" is better
+ * evidence than any heuristic, so a correction overrides the computed verdict.
+ */
+function applyCorrections(places: Place[]): { places: Place[]; applied: number } {
+  const corrections = findCorrections(places.map((p) => p.id));
+  if (corrections.size === 0) return { places, applied: 0 };
+
+  let applied = 0;
+  const out: Place[] = [];
+
+  for (const place of places) {
+    const reports = corrections.get(place.id);
+    if (!reports?.length) {
+      out.push(place);
+      continue;
+    }
+
+    // Most recent report wins.
+    const latest = [...reports].sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt),
+    )[0];
+    applied++;
+
+    if (latest.kindOfReport === "closed") continue; // Drop it entirely.
+
+    if (latest.kindOfReport === "chain") {
+      out.push({
+        ...place,
+        independence: {
+          score: 0,
+          independent: false,
+          reasons: [...place.independence.reasons, "Reported as a chain by a visitor"],
+          chainName: place.independence.chainName,
+        },
+        sources: [...place.sources, { source: "community", ref: String(latest.id) }],
+      });
+      continue;
+    }
+
+    if (latest.kindOfReport === "independent") {
+      out.push({
+        ...place,
+        independence: {
+          score: 100,
+          independent: true,
+          reasons: [
+            ...place.independence.reasons,
+            "Confirmed independently owned by a visitor",
+          ],
+        },
+        sources: [...place.sources, { source: "community", ref: String(latest.id) }],
+      });
+      continue;
+    }
+
+    out.push(place);
+  }
+
+  return { places: out, applied };
+}
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
@@ -27,60 +107,66 @@ export async function GET(request: Request) {
 
   const radius = clampRadius(Number(params.get("radius") ?? 8000));
 
-  const requested = (params.get("categories") ?? "")
+  const requestedCategories = (params.get("categories") ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean)
     .filter(isCategoryId) as CategoryId[];
-  const categories = requested.length ? new Set(requested) : null;
+  const categories = requestedCategories.length ? new Set(requestedCategories) : null;
+
+  const requestedSources = (params.get("sources") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter(isSourceId);
+  const only = requestedSources.length ? new Set(requestedSources) : undefined;
 
   // `all=1` keeps chains in the response, flagged rather than removed, so the
   // filter can be inspected instead of taken on faith.
   const includeChains = params.get("all") === "1";
 
   const warnings: string[] = [];
-  let places: Place[] = [];
 
-  try {
-    const { elements, warnings: mirrorWarnings } = await fetchOverpass(
-      lat,
-      lon,
-      radius,
-    );
-    if (mirrorWarnings.length) {
-      warnings.push(`Fell back after ${mirrorWarnings.length} mirror failure(s).`);
-    }
-    places = elementsToPlaces(elements, lat, lon);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json(
-      {
-        error:
-          "OpenStreetMap's Overpass service is unavailable right now. Try again in a minute.",
-        detail: message,
-      },
-      { status: 503 },
-    );
-  }
-
-  // USDA only runs when an API key is configured; it is purely additive.
-  const usda = await fetchUsdaMarkets(lat, lon, radius);
-  if (usda.warning) warnings.push(usda.warning);
-  if (usda.places.length) {
-    const seen = new Set(
-      places.map((p) => `${p.name.toLowerCase()}|${p.lat.toFixed(3)}`),
-    );
-    for (const market of usda.places) {
-      const key = `${market.name.toLowerCase()}|${market.lat.toFixed(3)}`;
-      if (!seen.has(key)) {
-        places.push(market);
-        seen.add(key);
-      }
+  // Text sources need a place name, not coordinates. The caller can pass one to
+  // save a round trip; otherwise we look it up.
+  let areaName = params.get("area")?.trim() || undefined;
+  if (!areaName) {
+    try {
+      const hit = await reverseGeocode(lat, lon);
+      areaName = hit?.label.split(",").slice(0, 3).join(",").trim();
+    } catch {
+      // Non-fatal: the text sources will report themselves as skipped.
     }
   }
 
-  // Run this before filtering: it needs to see the full result set to count
-  // how many times each name occurs.
+  const { places: raw, statuses } = await gather({ lat, lon, radius, areaName }, only);
+
+  if (raw.length === 0 && statuses.every((s) => s.found === 0)) {
+    const osm = statuses.find((s) => s.source === "osm");
+    if (osm?.note) {
+      return NextResponse.json(
+        {
+          error:
+            "No sources could be reached right now. OpenStreetMap's Overpass service may be busy.",
+          detail: osm.note,
+          sources: statuses,
+        },
+        { status: 503 },
+      );
+    }
+  }
+
+  const { places: deduped, merged } = mergePlaces(raw);
+  if (merged > 0) {
+    warnings.push(
+      `${merged} duplicate listing${merged === 1 ? "" : "s"} merged across sources.`,
+    );
+  }
+
+  const corrected = applyCorrections(deduped);
+  let places = corrected.places;
+
+  // Needs the full set to count how often each name occurs.
   penalizeRepeatedNames(places);
 
   const beforeChainFilter = places.length;
@@ -94,8 +180,7 @@ export async function GET(request: Request) {
   }
 
   places.sort((a, b) => a.distance - b.distance);
-  const truncated = places.length > MAX_RESULTS;
-  if (truncated) {
+  if (places.length > MAX_RESULTS) {
     places = places.slice(0, MAX_RESULTS);
     warnings.push(
       `Showing the ${MAX_RESULTS} closest results. Zoom in or reduce the radius to see everything.`,
@@ -108,13 +193,14 @@ export async function GET(request: Request) {
     count: places.length,
     chainsFiltered,
     places,
+    sources: statuses,
     attribution: "© OpenStreetMap contributors (ODbL)",
     warnings: warnings.length ? warnings : undefined,
   };
 
   return NextResponse.json(body, {
     headers: {
-      // Cheap protection against hammering Overpass when the map is panned.
+      // Cheap protection against hammering the upstream services on every pan.
       "Cache-Control": "public, max-age=300, s-maxage=900",
     },
   });

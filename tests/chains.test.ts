@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 
-import { assessIndependence, normalizeName, penalizeRepeatedNames } from "../src/lib/chains.ts";
+import { assessIndependence, normalizeName, penalizeRepeatedNames } from "@/lib/chains";
 
 function verdict(tags: Record<string, string>) {
   return assessIndependence(tags);

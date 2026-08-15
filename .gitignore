@@ -42,3 +42,6 @@ next-env.d.ts
 
 # but do track the documented template
 !.env.example
+
+# local submissions database
+/data

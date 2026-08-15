@@ -3,9 +3,11 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import AddPlaceDialog from "@/components/AddPlaceDialog";
 import PlaceCard from "@/components/PlaceCard";
 import PlaceDetail from "@/components/PlaceDetail";
 import SearchBar from "@/components/SearchBar";
+import SourcesPanel from "@/components/SourcesPanel";
 import { CATEGORY_LIST } from "@/lib/categories";
 import { haversine } from "@/lib/geo";
 import { evaluateHours } from "@/lib/hours";
@@ -50,8 +52,16 @@ export default function Explorer() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "map">("list");
-  // Bumped by the retry button to re-run the search effect unchanged.
+  // Bumped by the retry button, and after a submission, to re-run the search.
   const [reloadKey, setReloadKey] = useState(0);
+  const [showAddPlace, setShowAddPlace] = useState(false);
+  const [canSubmit, setCanSubmit] = useState(false);
+  /**
+   * News- and event-derived listings are useful but unconfirmed, so they're
+   * opt-out rather than hidden: someone looking for a pop-up wants them, and
+   * someone who doesn't can switch them off in one click.
+   */
+  const [showUnverified, setShowUnverified] = useState(true);
 
   // Where the map is currently looking, versus where results were fetched for.
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
@@ -104,6 +114,21 @@ export default function Explorer() {
     return () => controller.abort();
   }, [searchKey, center.lat, center.lon, radius]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/submissions")
+      .then((r) => r.json())
+      .then((payload) => {
+        if (!cancelled) setCanSubmit(Boolean(payload?.available));
+      })
+      .catch(() => {
+        if (!cancelled) setCanSubmit(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // --- Derived list --------------------------------------------------------
 
   /**
@@ -124,6 +149,7 @@ export default function Explorer() {
     let list = data?.places ?? [];
     if (active.size) list = list.filter((p) => active.has(p.category));
     if (openOnly) list = list.filter((p) => openStates.get(p.id) === "open");
+    if (!showUnverified) list = list.filter((p) => p.confidence !== "lead");
 
     const sorted = [...list];
     if (sort === "distance") sorted.sort((a, b) => a.distance - b.distance);
@@ -135,7 +161,7 @@ export default function Explorer() {
       );
     }
     return sorted;
-  }, [data, active, openOnly, sort, openStates]);
+  }, [data, active, openOnly, sort, openStates, showUnverified]);
 
   const counts = useMemo(() => {
     const map = new Map<CategoryId, number>();
@@ -295,15 +321,26 @@ export default function Explorer() {
           })}
         </div>
 
-        <label className="flex items-center gap-2 text-xs text-muted">
-          <input
-            type="checkbox"
-            checked={openOnly}
-            onChange={(e) => setOpenOnly(e.target.checked)}
-            className="accent-[var(--accent)]"
-          />
-          Open right now (only where hours are known)
-        </label>
+        <div className="space-y-1.5">
+          <label className="flex items-center gap-2 text-xs text-muted">
+            <input
+              type="checkbox"
+              checked={openOnly}
+              onChange={(e) => setOpenOnly(e.target.checked)}
+              className="accent-[var(--accent)]"
+            />
+            Open right now (only where hours are known)
+          </label>
+          <label className="flex items-center gap-2 text-xs text-muted">
+            <input
+              type="checkbox"
+              checked={showUnverified}
+              onChange={(e) => setShowUnverified(e.target.checked)}
+              className="accent-[var(--accent)]"
+            />
+            Include unverified finds from news &amp; events
+          </label>
+        </div>
       </div>
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-4 py-3">
@@ -375,6 +412,18 @@ export default function Explorer() {
             {warning}
           </p>
         ))}
+
+        {data?.sources && <SourcesPanel sources={data.sources} />}
+
+        {canSubmit && (
+          <button
+            type="button"
+            onClick={() => setShowAddPlace(true)}
+            className="mt-3 w-full rounded-lg border border-dashed border-edge px-3 py-2 text-xs text-muted hover:bg-surface-muted"
+          >
+            + Add a place we&apos;ve missed
+          </button>
+        )}
       </div>
     </div>
   );
@@ -406,6 +455,7 @@ export default function Explorer() {
             place={selected}
             openState={openStates.get(selected.id) ?? "unknown"}
             onClose={() => setSelectedId(null)}
+            canReport={canSubmit}
           />
         </div>
       )}
@@ -455,6 +505,14 @@ export default function Explorer() {
           {map}
         </div>
       </main>
+
+      {showAddPlace && (
+        <AddPlaceDialog
+          center={mapCenter}
+          onClose={() => setShowAddPlace(false)}
+          onAdded={() => setReloadKey((n) => n + 1)}
+        />
+      )}
     </div>
   );
 }

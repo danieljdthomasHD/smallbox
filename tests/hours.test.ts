@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 
-import { evaluateHours } from "../src/lib/hours.ts";
+import { evaluateHours } from "@/lib/hours";
 
 /** A fixed local moment: Saturday 2026-08-15, 11:30. */
 const satMorning = new Date(2026, 7, 15, 11, 30);

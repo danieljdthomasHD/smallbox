@@ -1,7 +1,9 @@
 "use client";
 
+import { ConfidenceBadge, SourceSummary } from "@/components/Provenance";
 import { CATEGORIES } from "@/lib/categories";
 import { formatDistance } from "@/lib/geo";
+import { summariseOccurrences } from "@/lib/occurrences";
 import type { OpenState, Place } from "@/lib/types";
 
 const OPEN_LABEL: Record<OpenState, { text: string; className: string } | null> = {
@@ -28,6 +30,8 @@ export default function PlaceCard({
   const flaggedChain = place.independence.reasons.some((r) =>
     r.includes("local chain"),
   );
+  const dates = summariseOccurrences(place.occurrences);
+  const isPopup = place.kind === "popup";
 
   return (
     <button
@@ -62,9 +66,24 @@ export default function PlaceCard({
             {place.address ? ` · ${place.address}` : ""}
           </p>
 
+          {/* For a pop-up the dates are the headline, not a footnote. */}
+          {dates && (
+            <p className="mt-1 truncate text-xs font-medium text-accent">📅 {dates}</p>
+          )}
+
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {open && (
-              <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${open.className}`}>
+            {isPopup && (
+              <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:text-violet-400">
+                Pop-up
+              </span>
+            )}
+            {place.confidence !== "verified" && (
+              <ConfidenceBadge confidence={place.confidence} />
+            )}
+            {open && !isPopup && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${open.className}`}
+              >
                 {open.text}
               </span>
             )}
@@ -86,6 +105,9 @@ export default function PlaceCard({
                 Small chain?
               </span>
             )}
+            <span className="ml-auto">
+              <SourceSummary sources={place.sources} />
+            </span>
           </div>
         </div>
       </div>

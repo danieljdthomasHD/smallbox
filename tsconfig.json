@@ -6,9 +6,6 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
-    // The tests run on Node's native type stripping, which requires the real
-    // ".ts" extension in import paths.
-    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",

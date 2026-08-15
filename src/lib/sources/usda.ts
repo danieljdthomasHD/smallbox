@@ -1,7 +1,8 @@
-import { assessIndependence } from "./chains";
-import { haversine } from "./geo";
-import { evaluateHours } from "./hours";
-import type { Place } from "./types";
+import { assessIndependence } from "../chains";
+import { haversine } from "../geo";
+import { evaluateHours } from "../hours";
+import type { Place } from "../types";
+import { emptyResult, type Provider, type ProviderQuery, type ProviderResult } from "./types";
 
 /**
  * Optional enrichment from the USDA Local Food Directories.
@@ -30,20 +31,13 @@ interface UsdaMarket {
   updatetime?: string;
 }
 
-export interface UsdaResult {
-  places: Place[];
-  warning?: string;
-}
-
-const EMPTY: UsdaResult = { places: [] };
-
-export async function fetchUsdaMarkets(
+async function fetchUsdaMarkets(
   lat: number,
   lon: number,
   radiusMetres: number,
-): Promise<UsdaResult> {
+): Promise<ProviderResult> {
   const apiKey = process.env.USDA_API_KEY;
-  if (!apiKey) return EMPTY;
+  if (!apiKey) return emptyResult();
 
   // The USDA API takes miles and caps out at 100.
   const radiusMiles = Math.min(
@@ -63,7 +57,7 @@ export async function fetchUsdaMarkets(
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!response.ok) {
-      return { places: [], warning: `USDA directory returned HTTP ${response.status}.` };
+      return emptyResult(`USDA directory returned HTTP ${response.status}.`);
     }
 
     const payload = (await response.json()) as { data?: UsdaMarket[] };
@@ -79,10 +73,12 @@ export async function fetchUsdaMarkets(
       const tags: Record<string, string> = { name, amenity: "marketplace" };
       if (row.listing_desc) tags.description = row.listing_desc;
 
+      const ref = String(row.listing_id ?? `${rowLat},${rowLon}`);
       places.push({
-        id: `usda:${row.listing_id ?? `${rowLat},${rowLon}`}`,
+        id: `usda:${ref}`,
         name,
         category: "farmers_market",
+        kind: "permanent",
         lat: rowLat,
         lon: rowLon,
         distance: haversine(lat, lon, rowLat, rowLon),
@@ -91,8 +87,13 @@ export async function fetchUsdaMarkets(
         website: row.media_website?.trim() || undefined,
         openingHours: undefined,
         openState: evaluateHours(undefined),
-        tags: row.location_desc ? { description: row.location_desc } : {},
+        description: row.listing_desc?.trim() || row.location_desc?.trim() || undefined,
+        tags: {},
         independence: assessIndependence(tags),
+        confidence: "verified",
+        sources: [
+          { source: "usda", ref, url: "https://www.usdalocalfoodportal.com/" },
+        ],
         source: "usda",
         sourceUrl: "https://www.usdalocalfoodportal.com/",
       });
@@ -101,6 +102,26 @@ export async function fetchUsdaMarkets(
     return { places };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { places: [], warning: `USDA directory unavailable: ${message}` };
+    return emptyResult(`USDA directory unavailable: ${message}`);
   }
 }
+
+export const usdaProvider: Provider = {
+  id: "usda",
+  label: "USDA Local Food Directory",
+
+  isEnabled() {
+    return Boolean(process.env.USDA_API_KEY);
+  },
+
+  disabledReason() {
+    return this.isEnabled()
+      ? undefined
+      : "Set USDA_API_KEY (free) to include the USDA's curated US market directory.";
+  },
+
+  async fetch({ lat, lon, radius }: ProviderQuery): Promise<ProviderResult> {
+    if (!this.isEnabled()) return emptyResult(this.disabledReason());
+    return fetchUsdaMarkets(lat, lon, radius);
+  },
+};
