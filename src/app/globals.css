@@ -1,0 +1,102 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+:root {
+  --background: #fbfaf7;
+  --surface: #ffffff;
+  --surface-muted: #f4f2ec;
+  --border: #e4e0d6;
+  --foreground: #1f1b16;
+  --muted: #6d675d;
+  --accent: #15803d;
+  --accent-soft: #dcfce7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #14130f;
+    --surface: #1d1b16;
+    --surface-muted: #262218;
+    --border: #37322a;
+    --foreground: #f3efe6;
+    --muted: #a8a094;
+    --accent: #4ade80;
+    --accent-soft: #14321f;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-edge: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --font-sans: var(--font-geist-sans);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Leaflet's default panes assume a white page; match the app instead. */
+.leaflet-container {
+  background: var(--surface-muted);
+  font-family: inherit;
+  z-index: 0;
+}
+
+.leaflet-control-attribution {
+  background: color-mix(in srgb, var(--surface) 88%, transparent) !important;
+  color: var(--muted) !important;
+  font-size: 10px !important;
+}
+
+.leaflet-control-attribution a {
+  color: var(--muted) !important;
+}
+
+.leaflet-bar a {
+  background: var(--surface) !important;
+  color: var(--foreground) !important;
+  border-color: var(--border) !important;
+}
+
+/* Map pins are rendered as divIcons so there are no image assets to 404. */
+.pin {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px 999px 999px 2px;
+  transform: rotate(-45deg);
+  border: 2px solid rgb(255 255 255 / 0.9);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.pin > span {
+  transform: rotate(45deg);
+}
+
+.pin-selected {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  z-index: 500;
+}
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
