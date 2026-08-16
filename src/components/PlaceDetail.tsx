@@ -11,7 +11,7 @@ import { CATEGORIES } from "@/lib/categories";
 import { formatDistance } from "@/lib/geo";
 import { humanizeHours } from "@/lib/hours";
 import { formatOccurrence, upcomingOccurrences } from "@/lib/occurrences";
-import type { OpenState, Place } from "@/lib/types";
+import type { IndependenceVerdict, OpenState, Place } from "@/lib/types";
 
 interface PlaceDetailProps {
   place: Place;
@@ -41,18 +41,18 @@ const REPORTS: { kind: ReportKind; label: string; done: string }[] = [
 /**
  * Only offer corrections that would change something.
  *
- * Every one of these overwrites the app's own verdict, so the option that
- * simply restates it isn't a correction — it's a third button that makes the
- * reader wonder what they're being asked.
+ * Two rules. The option that restates the current verdict isn't a correction,
+ * it's a button that makes the reader wonder what they're being asked. And a
+ * verdict reached by a hard signal — a brand entity, a denylist match — isn't
+ * a judgement call to reopen: "Whole Foods is actually independent" is not a
+ * correction, it's vandalism, and offering it invites exactly that.
  */
-function correctionsFor(independent: boolean) {
-  return REPORTS.filter((report) =>
-    report.kind === "closed"
-      ? true
-      : independent
-        ? report.kind === "chain"
-        : report.kind === "independent",
-  );
+function correctionsFor(verdict: IndependenceVerdict) {
+  return REPORTS.filter((report) => {
+    if (report.kind === "closed") return true;
+    if (verdict.independent) return report.kind === "chain";
+    return report.kind === "independent" && !verdict.definitive;
+  });
 }
 
 export default function PlaceDetail({
@@ -236,7 +236,7 @@ export default function PlaceDetail({
               <p className="mt-2 text-xs text-accent">{reported} — thank you.</p>
             ) : (
               <div className="mt-2 flex flex-wrap gap-2">
-                {correctionsFor(place.independence.independent).map(({ kind, label, done }) => (
+                {correctionsFor(place.independence).map(({ kind, label, done }) => (
                   <button
                     key={kind}
                     type="button"
@@ -250,9 +250,21 @@ export default function PlaceDetail({
               </div>
             )}
             <p className="mt-2 text-[11px] leading-relaxed text-muted">
-              Smallbox scores this {place.independence.independent ? "independent" : "a chain"}{" "}
-              from its own tags. If that&apos;s wrong, correcting it here overrides the
-              guess for everyone.
+              {place.independence.definitive ? (
+                <>
+                  Identified as{" "}
+                  {place.independence.chainName ?? "a chain"} from its own brand
+                  tags, so that can&apos;t be corrected here. If the tags themselves
+                  are wrong, fix them at the source.
+                </>
+              ) : (
+                <>
+                  Smallbox scores this{" "}
+                  {place.independence.independent ? "independent" : "a chain"} from
+                  its own tags. If that&apos;s wrong, correcting it here overrides
+                  the guess for everyone.
+                </>
+              )}
             </p>
           </div>
         )}

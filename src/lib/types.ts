@@ -48,6 +48,14 @@ export interface IndependenceVerdict {
   reasons: string[];
   /** Set when we matched a known chain or big-box brand. */
   chainName?: string;
+  /**
+   * True when a hard signal decided this — a brand entity, an explicit chain
+   * tag, or a denylist name match. Soft verdicts (the repeat detector, a lone
+   * supermarket format) are judgement calls and stay open to correction;
+   * definitive ones do not, because "Whole Foods is actually independent" is
+   * not a correction anyone needs to be able to file.
+   */
+  definitive?: boolean;
 }
 
 export type OpenState = "open" | "closed" | "unknown";

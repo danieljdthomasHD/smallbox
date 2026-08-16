@@ -240,6 +240,7 @@ export function assessIndependence(
   const reasons: string[] = [];
   let score = 70;
   let chainName: string | undefined;
+  let definitive = false;
 
   const name = tags.name ?? "";
   const normalized = normalizeName(name);
@@ -251,10 +252,12 @@ export function assessIndependence(
   if (tags["brand:wikidata"]) {
     score -= 70;
     chainName = tags.brand ?? tags["brand:wikidata"];
+    definitive = true;
     reasons.push(`Tagged as part of the "${chainName}" brand in OpenStreetMap`);
   } else if (tags.brand) {
     score -= 55;
     chainName = tags.brand;
+    definitive = true;
     reasons.push(`Carries the brand "${tags.brand}"`);
   }
 
@@ -262,6 +265,7 @@ export function assessIndependence(
   if (nameMatch) {
     score -= 70;
     chainName = chainName ?? pretty(nameMatch);
+    definitive = true;
     reasons.push(`Name matches the known chain "${pretty(nameMatch)}"`);
   }
 
@@ -274,12 +278,14 @@ export function assessIndependence(
     if (operatorMatch) {
       score -= 60;
       chainName = chainName ?? pretty(operatorMatch);
+      definitive = true;
       reasons.push(`Operated by "${tags.operator}"`);
     }
   }
 
   if (tags["operator:type"] === "chain" || tags.franchise === "yes") {
     score -= 50;
+    definitive = true;
     reasons.push("Tagged as a franchise or chain location");
   }
 
@@ -326,6 +332,8 @@ export function assessIndependence(
     independent: score >= INDEPENDENT_THRESHOLD,
     reasons,
     chainName,
+    // Only meaningful for a negative verdict.
+    definitive: definitive && score < INDEPENDENT_THRESHOLD,
   };
 }
 

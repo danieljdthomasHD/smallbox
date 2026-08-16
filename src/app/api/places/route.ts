@@ -72,6 +72,15 @@ function applyCorrections(places: Place[]): { places: Place[]; applied: number }
     }
 
     if (latest.kindOfReport === "independent") {
+      // A verdict reached by a hard signal — a brand entity, an explicit chain
+      // tag, a denylist match — is a fact about the listing, not a judgement
+      // call, and no report overturns it. The UI doesn't offer the option, but
+      // the endpoint is public, so the rule is enforced here rather than there.
+      if (place.independence.definitive) {
+        out.push(place);
+        continue;
+      }
+
       out.push({
         ...place,
         independence: {

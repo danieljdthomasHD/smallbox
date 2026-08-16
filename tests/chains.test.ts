@@ -109,3 +109,39 @@ test("two locations is not enough to be called a chain", () => {
   penalizeRepeatedNames(items);
   assert.equal(items[0].independence.independent, true);
 });
+
+test("hard chain signals produce a definitive verdict", () => {
+  // A brand entity, a denylist name, and an explicit chain tag are all facts
+  // about the listing, not judgement calls — nobody should be able to file
+  // "actually independent" against them.
+  for (const tags of [
+    { name: "Whole Foods Market", shop: "supermarket", "brand:wikidata": "Q1809448" },
+    { name: "Trader Joe's", shop: "supermarket" },
+    { name: "Some Franchise", shop: "bakery", franchise: "yes" },
+  ]) {
+    const v = verdict(tags);
+    assert.equal(v.independent, false, `${tags.name} should be filtered`);
+    assert.equal(v.definitive, true, `${tags.name} should be definitive`);
+  }
+});
+
+test("soft verdicts stay open to correction", () => {
+  // The repeat detector is a heuristic about a name occurring often. It can be
+  // wrong about a genuinely independent shop, so it must remain correctable.
+  const items = ["Corner Larder", "Corner Larder", "Corner Larder"].map((name) => ({
+    name,
+    independence: assessIndependence({ name, shop: "supermarket" }),
+  }));
+  penalizeRepeatedNames(items);
+
+  assert.equal(items[0].independence.independent, false);
+  assert.notEqual(items[0].independence.definitive, true);
+});
+
+test("an independent verdict is never marked definitive", () => {
+  // `definitive` only ever locks a negative verdict; it must not leak onto a
+  // place that passed, where it would have no meaning.
+  const v = verdict({ name: "Nonna's Bakery", shop: "bakery" });
+  assert.equal(v.independent, true);
+  assert.notEqual(v.definitive, true);
+});
