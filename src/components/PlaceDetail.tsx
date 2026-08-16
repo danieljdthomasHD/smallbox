@@ -33,10 +33,27 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 type ReportKind = "independent" | "chain" | "closed";
 
 const REPORTS: { kind: ReportKind; label: string; done: string }[] = [
-  { kind: "independent", label: "It's independent", done: "Marked as independent" },
-  { kind: "chain", label: "It's a chain", done: "Marked as a chain" },
-  { kind: "closed", label: "It's closed", done: "Reported as closed" },
+  { kind: "independent", label: "Actually independent", done: "Marked as independent" },
+  { kind: "chain", label: "Actually a chain", done: "Marked as a chain" },
+  { kind: "closed", label: "Permanently closed", done: "Reported as closed" },
 ];
+
+/**
+ * Only offer corrections that would change something.
+ *
+ * Every one of these overwrites the app's own verdict, so the option that
+ * simply restates it isn't a correction — it's a third button that makes the
+ * reader wonder what they're being asked.
+ */
+function correctionsFor(independent: boolean) {
+  return REPORTS.filter((report) =>
+    report.kind === "closed"
+      ? true
+      : independent
+        ? report.kind === "chain"
+        : report.kind === "independent",
+  );
+}
 
 export default function PlaceDetail({
   place,
@@ -213,13 +230,13 @@ export default function PlaceDetail({
         {canReport && (
           <div className="mt-3">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
-              Something wrong?
+              Is this right?
             </h3>
             {reported ? (
               <p className="mt-2 text-xs text-accent">{reported} — thank you.</p>
             ) : (
               <div className="mt-2 flex flex-wrap gap-2">
-                {REPORTS.map(({ kind, label, done }) => (
+                {correctionsFor(place.independence.independent).map(({ kind, label, done }) => (
                   <button
                     key={kind}
                     type="button"
@@ -233,7 +250,9 @@ export default function PlaceDetail({
               </div>
             )}
             <p className="mt-2 text-[11px] leading-relaxed text-muted">
-              Reports override the automatic guess for everyone using this app.
+              Smallbox scores this {place.independence.independent ? "independent" : "a chain"}{" "}
+              from its own tags. If that&apos;s wrong, correcting it here overrides the
+              guess for everyone.
             </p>
           </div>
         )}

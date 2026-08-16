@@ -72,6 +72,14 @@ export default function PlaceCard({
           )}
 
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {!place.independence.independent && (
+              <span
+                className="rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:text-red-400"
+                title={place.independence.chainName ?? "Filtered out as a chain"}
+              >
+                Chain
+              </span>
+            )}
             {isPopup && (
               <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:text-violet-400">
                 Pop-up

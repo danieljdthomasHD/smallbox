@@ -62,6 +62,14 @@ export default function Explorer() {
    * someone who doesn't can switch them off in one click.
    */
   const [showUnverified, setShowUnverified] = useState(true);
+  /**
+   * Reveal the places the chain filter removed.
+   *
+   * A false positive here hides a real independent shop, and that's the error
+   * worth caring about — so the filter has to be reviewable, and correctable,
+   * rather than something you simply trust.
+   */
+  const [showChains, setShowChains] = useState(false);
 
   // Where the map is currently looking, versus where results were fetched for.
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
@@ -72,7 +80,7 @@ export default function Explorer() {
    * inside an async callback instead of the effect body — no cascading renders,
    * and stale responses can't overwrite a newer search.
    */
-  const searchKey = `${center.lat},${center.lon},${radius},${reloadKey}`;
+  const searchKey = `${center.lat},${center.lon},${radius},${reloadKey},${showChains ? 1 : 0}`;
   const [result, setResult] = useState<{
     key: string;
     data: PlacesResponse | null;
@@ -90,7 +98,8 @@ export default function Explorer() {
     const controller = new AbortController();
 
     fetch(
-      `/api/places?lat=${center.lat}&lon=${center.lon}&radius=${radius}`,
+      `/api/places?lat=${center.lat}&lon=${center.lon}&radius=${radius}` +
+        (showChains ? "&all=1" : ""),
       { signal: controller.signal },
     )
       .then(async (response) => {
@@ -112,7 +121,7 @@ export default function Explorer() {
       });
 
     return () => controller.abort();
-  }, [searchKey, center.lat, center.lon, radius]);
+  }, [searchKey, center.lat, center.lon, radius, showChains]);
 
   useEffect(() => {
     let cancelled = false;
@@ -382,13 +391,29 @@ export default function Explorer() {
             <p className="mb-2 text-xs text-muted">
               {visible.length} place{visible.length === 1 ? "" : "s"} near{" "}
               {locationLabel}
-              {data?.chainsFiltered ? (
+              {showChains ? (
                 <>
                   {" · "}
-                  <span title="Big-box stores and chains excluded from these results">
+                  <button
+                    type="button"
+                    onClick={() => setShowChains(false)}
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
+                    hide chains again
+                  </button>
+                </>
+              ) : data?.chainsFiltered ? (
+                <>
+                  {" · "}
+                  <button
+                    type="button"
+                    onClick={() => setShowChains(true)}
+                    title="Show what the chain filter removed, so a wrong call can be corrected"
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
                     {data.chainsFiltered} chain
                     {data.chainsFiltered === 1 ? "" : "s"} hidden
-                  </span>
+                  </button>
                 </>
               ) : null}
             </p>
