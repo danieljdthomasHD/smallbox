@@ -17,11 +17,17 @@ npm run dev        # http://localhost:3000
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FdanieljdthomasHD%2Fsmallbox&project-name=smallbox&repository-name=smallbox)
 
-Deploys with no configuration. One caveat: serverless filesystems are
-read-only, so the SQLite submissions store can't persist there — the app
-detects this, reports "Community submissions" as unavailable in the sources
-panel, and everything else works normally. Point `src/lib/db.ts` at a hosted
-Postgres to get submissions back.
+Deploys with no configuration — `claude/local-markets-app-u16180` is the
+repository's default branch, so the button picks up this code.
+
+One caveat: submissions need a writable disk and the `better-sqlite3` native
+module, and a serverless host usually has neither. Both cases are handled the
+same way — the app reports "Community submissions" as unavailable in its
+sources panel, with the reason, and every other source works normally. Point
+`src/lib/db.ts` at a hosted Postgres to get submissions back.
+
+Add any of the keys from `.env.example` in the Vercel project settings to switch
+on the optional sources.
 
 ```bash
 npm run build      # production build

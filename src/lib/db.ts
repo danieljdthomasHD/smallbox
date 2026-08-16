@@ -1,9 +1,20 @@
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 
-import Database from "better-sqlite3";
+import type DatabaseType from "better-sqlite3";
 
 import type { CategoryId, PlaceKind, Submission } from "./types";
+
+/**
+ * Loaded through `require` at call time rather than imported at module scope.
+ *
+ * better-sqlite3 is a native addon, so on a host without a matching prebuild it
+ * fails to load at all. A static import would take the whole route down with
+ * it; resolving it lazily turns that into the same "submissions unavailable"
+ * state a read-only filesystem already produces.
+ */
+const requireModule = createRequire(import.meta.url);
 
 /**
  * Storage for user submissions and corrections.
@@ -19,14 +30,15 @@ import type { CategoryId, PlaceKind, Submission } from "./types";
 
 const DB_PATH = process.env.SMALLBOX_DB_PATH ?? path.join(process.cwd(), "data", "smallbox.db");
 
-let db: Database.Database | null = null;
+let db: DatabaseType.Database | null = null;
 let openFailed: string | null = null;
 
-function connect(): Database.Database | null {
+function connect(): DatabaseType.Database | null {
   if (db) return db;
   if (openFailed) return null;
 
   try {
+    const Database = requireModule("better-sqlite3") as typeof DatabaseType;
     fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
     const handle = new Database(DB_PATH);
     handle.pragma("journal_mode = WAL");
@@ -55,10 +67,28 @@ function connect(): Database.Database | null {
     return db;
   } catch (error) {
     // A read-only filesystem is an expected deployment, not a crash.
-    openFailed = error instanceof Error ? error.message : String(error);
-    console.warn("[smallbox] submissions database unavailable:", openFailed);
+    const raw = error instanceof Error ? error.message : String(error);
+    openFailed = explain(raw);
+    console.warn("[smallbox] submissions database unavailable:", raw);
     return null;
   }
+}
+
+/**
+ * Turn a loader or filesystem error into one line a visitor can act on.
+ *
+ * The raw text is a module-resolution stack trace several lines long, and this
+ * string is rendered in the app's sources panel — the reader needs to know
+ * which of the two ordinary causes applies, not read a require stack.
+ */
+function explain(raw: string): string {
+  if (/cannot find module|failed to load external module|invalid elf|was compiled against/i.test(raw)) {
+    return "the better-sqlite3 module isn't available on this host";
+  }
+  if (/erofs|read-only|eacces|eperm/i.test(raw)) {
+    return "the filesystem is read-only";
+  }
+  return raw.split("\n")[0].slice(0, 140);
 }
 
 export function isStoreAvailable(): boolean {
