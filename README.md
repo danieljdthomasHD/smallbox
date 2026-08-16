@@ -13,6 +13,16 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
+### Getting a hosted link
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FdanieljdthomasHD%2Fsmallbox&project-name=smallbox&repository-name=smallbox)
+
+Deploys with no configuration. One caveat: serverless filesystems are
+read-only, so the SQLite submissions store can't persist there — the app
+detects this, reports "Community submissions" as unavailable in the sources
+panel, and everything else works normally. Point `src/lib/db.ts` at a hosted
+Postgres to get submissions back.
+
 ```bash
 npm run build      # production build
 npm test           # unit tests for the filtering, hours and merge logic

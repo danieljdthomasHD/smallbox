@@ -114,11 +114,12 @@ test("hard chain signals produce a definitive verdict", () => {
   // A brand entity, a denylist name, and an explicit chain tag are all facts
   // about the listing, not judgement calls — nobody should be able to file
   // "actually independent" against them.
-  for (const tags of [
+  const cases: Record<string, string>[] = [
     { name: "Whole Foods Market", shop: "supermarket", "brand:wikidata": "Q1809448" },
     { name: "Trader Joe's", shop: "supermarket" },
     { name: "Some Franchise", shop: "bakery", franchise: "yes" },
-  ]) {
+  ];
+  for (const tags of cases) {
     const v = verdict(tags);
     assert.equal(v.independent, false, `${tags.name} should be filtered`);
     assert.equal(v.definitive, true, `${tags.name} should be definitive`);
