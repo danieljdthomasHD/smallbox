@@ -17,8 +17,9 @@ npm run dev        # http://localhost:3000
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FdanieljdthomasHD%2Fsmallbox&project-name=smallbox&repository-name=smallbox)
 
-Deploys with no configuration — `claude/local-markets-app-u16180` is the
-repository's default branch, so the button picks up this code.
+Deploys with no configuration. The `main` branch carries the current code
+(mirrored from the development branch), so point Vercel's production branch
+at `main`.
 
 One caveat: submissions need a writable disk and the `better-sqlite3` native
 module, and a serverless host usually has neither. Both cases are handled the
