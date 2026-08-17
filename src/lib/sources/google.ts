@@ -35,12 +35,31 @@ const TYPE_TO_CATEGORY: Record<string, CategoryId> = {
   food_store: "grocery",
   deli: "grocery",
   health_food_store: "grocery",
+  asian_grocery_store: "grocery",
   fruit_and_vegetable_store: "produce",
   greengrocer: "produce",
   organic_food_store: "produce",
 };
 
-const REQUESTED_TYPES = Object.keys(TYPE_TO_CATEGORY);
+/**
+ * Only "Table A" types may be used to filter a search; the rest (seafood_store,
+ * cheese_store, fruit_and_vegetable_store...) appear in responses only, and
+ * putting one in `includedTypes` fails the whole request with
+ * "Unsupported types". Those shops still arrive here — a fishmonger also
+ * carries food_store — and the response-only type then classifies it above.
+ */
+const REQUESTED_TYPES = [
+  "farmers_market",
+  "market",
+  "butcher_shop",
+  "bakery",
+  "grocery_store",
+  "supermarket",
+  "food_store",
+  "deli",
+  "health_food_store",
+  "asian_grocery_store",
+];
 
 /**
  * Google bills Places (New) by which fields a request asks for, and the tiers
