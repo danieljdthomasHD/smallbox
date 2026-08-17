@@ -42,19 +42,39 @@ const TYPE_TO_CATEGORY: Record<string, CategoryId> = {
 
 const REQUESTED_TYPES = Object.keys(TYPE_TO_CATEGORY);
 
-const FIELD_MASK = [
+/**
+ * Google bills Places (New) by which fields a request asks for, and the tiers
+ * differ enormously: identity/location fields are the "Pro" SKU with a
+ * ~5,000-call monthly free allowance, while phone, website and opening hours
+ * push the whole call into "Enterprise" pricing with only ~1,000 free calls.
+ *
+ * The cheap mask is therefore the default. Contact detail mostly arrives from
+ * OSM after merging anyway; set GOOGLE_PLACES_FIELDS=full only if you want
+ * Google's hours and phone numbers badly enough to pay their rate for them.
+ */
+const FIELD_MASK_BASIC = [
   "places.id",
   "places.displayName",
   "places.formattedAddress",
   "places.location",
   "places.types",
   "places.primaryType",
+  "places.businessStatus",
+].join(",");
+
+const FIELD_MASK_FULL = [
+  FIELD_MASK_BASIC,
   "places.nationalPhoneNumber",
   "places.websiteUri",
   "places.regularOpeningHours.weekdayDescriptions",
   "places.regularOpeningHours.openNow",
-  "places.businessStatus",
 ].join(",");
+
+function fieldMask(): string {
+  return process.env.GOOGLE_PLACES_FIELDS === "full"
+    ? FIELD_MASK_FULL
+    : FIELD_MASK_BASIC;
+}
 
 interface GooglePlace {
   id?: string;
@@ -103,7 +123,7 @@ export const googleProvider: Provider = {
         headers: {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": apiKey,
-          "X-Goog-FieldMask": FIELD_MASK,
+          "X-Goog-FieldMask": fieldMask(),
         },
         body: JSON.stringify({
           includedTypes: REQUESTED_TYPES,
