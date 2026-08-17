@@ -34,6 +34,19 @@ test("a bar is not a market, whatever its secondary types say", () => {
   );
 });
 
+test("the loose `market` type alone is not a farmers market", () => {
+  // Live Dayton, KY data: an apparel store arrived typed `market`.
+  assert.equal(
+    classifyGoogle({ primaryType: "market", types: ["market", "clothing_store", "store"] }),
+    null,
+  );
+  // The dedicated type still is one.
+  assert.equal(
+    classifyGoogle({ primaryType: "farmers_market", types: ["farmers_market", "market"] }),
+    "farmers_market",
+  );
+});
+
 test("a mapped primaryType wins over restaurant-ish side types", () => {
   // A good bakery is usually also a cafe; a deli is usually also a sandwich
   // shop (the Rump & Roll case). Their primary identity keeps them in.

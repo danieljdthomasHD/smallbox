@@ -147,6 +147,19 @@ test("an independent verdict is never marked definitive", () => {
   assert.notEqual(v.definitive, true);
 });
 
+test("fuel brands are chains even when typed as grocers", () => {
+  // Live Dayton, KY data: a Marathon station arrived from Google typed as a
+  // grocery store.
+  for (const name of ["Marathon", "Marathon Gas", "Shell Food Store", "United Dairy Farmers"]) {
+    const v = verdict({ name });
+    assert.equal(v.independent, false, `${name} should be filtered`);
+  }
+  // Exact matching keeps innocent uses of the same words alive.
+  for (const name of ["Marathon Bakery", "Sea Shell Seafood Market"]) {
+    assert.equal(verdict({ name, shop: "bakery" }).independent, true, `${name} should be kept`);
+  }
+});
+
 test("farm-supply chains are not farm stands", () => {
   // Live Dayton data: "Rural king" mistagged shop=farm with no brand tag.
   const v = verdict({ name: "Rural king", shop: "farm" });

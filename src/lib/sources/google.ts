@@ -24,8 +24,9 @@ const MAX_RADIUS_M = 50_000;
 
 /** Google place types mapped onto our categories. */
 const TYPE_TO_CATEGORY: Record<string, CategoryId> = {
+  // Google's broader `market` type is deliberately absent: live data hung it
+  // on an apparel store. Real farmers markets carry farmers_market.
   farmers_market: "farmers_market",
-  market: "farmers_market",
   butcher_shop: "butcher",
   seafood_store: "seafood",
   fish_store: "seafood",
@@ -56,7 +57,6 @@ const TYPE_TO_CATEGORY: Record<string, CategoryId> = {
  */
 const REQUESTED_TYPES = [
   "farmers_market",
-  "market",
   "butcher_shop",
   "bakery",
   "grocery_store",
