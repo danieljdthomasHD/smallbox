@@ -52,6 +52,12 @@ const ListingSchema = z.object({
   occurrences: z
     .array(OccurrenceSchema)
     .describe("Specific dates it runs. Empty for an ongoing business with no dates given."),
+  schedule: z
+    .string()
+    .nullable()
+    .describe(
+      'Weekly recurring schedule in OSM opening_hours syntax when determinable, e.g. "We 15:00-18:00" for a Wednesday 3-6pm market. Null when unknown or irregular.',
+    ),
   description: z
     .string()
     .describe("One sentence, drawn from the article, on what this is."),
@@ -90,6 +96,9 @@ export interface ExtractionOutput {
 
 export interface ExtractionResult {
   listings: ExtractionOutput[];
+  /** Listings the text reported as closed, cancelled or ended — evidence for
+   *  suppressing the same place where other sources still list it. */
+  closures: ExtractionOutput[];
   /** Batches attempted and how many errored, so callers can tell "found
    *  nothing" apart from "couldn't read anything" — those mean different
    *  things to someone deciding whether to trust an empty result. */
@@ -126,6 +135,8 @@ Set stillOperating to false when the article reports a closure, cancellation, or
 
 Resolve dates against the article's publication date. If it says "this Saturday", work out the actual date. If no dates are given for an ongoing business, return an empty occurrences array rather than inventing one.
 
+A market that runs every week on the same day (e.g. "Wednesdays 3pm-6pm, June-October") is kind "permanent" with schedule set to OSM opening_hours syntax like "We 15:00-18:00" and the season noted in the description. Use kind "popup" with occurrences only for events on specific one-off dates.
+
 Set articleId on every listing to the id of the <article> element you found it in, so each listing can be linked back to its source.
 
 Extract only what the text supports. Do not infer an address that isn't there, and do not pad the results — returning an empty list for an article with nothing in it is the correct answer.`;
@@ -156,11 +167,12 @@ export async function extractListings(
   areaName: string,
   signal?: AbortSignal,
 ): Promise<ExtractionResult> {
-  const empty: ExtractionResult = { listings: [], batches: 0, failed: 0 };
+  const empty: ExtractionResult = { listings: [], closures: [], batches: 0, failed: 0 };
   if (!isExtractionEnabled() || articles.length === 0) return empty;
 
   const client = new Anthropic();
   const listings: ExtractionOutput[] = [];
+  const closures: ExtractionOutput[] = [];
   let batches = 0;
   let failed = 0;
   let lastError: string | undefined;
@@ -189,12 +201,11 @@ export async function extractListings(
 
       const byId = new Map(batch.map((a) => [a.id, a]));
       for (const listing of parsed.listings) {
-        if (!listing.stillOperating) continue;
         // Each listing names the article it came from, so provenance shown in
         // the UI links to the piece that actually mentioned this place.
         const source = byId.get(listing.articleId);
         if (!source) continue;
-        listings.push({ listing, source });
+        (listing.stillOperating ? listings : closures).push({ listing, source });
       }
     } catch (error) {
       failed++;
@@ -204,5 +215,5 @@ export async function extractListings(
     }
   }
 
-  return { listings, batches, failed, lastError };
+  return { listings, closures, batches, failed, lastError };
 }

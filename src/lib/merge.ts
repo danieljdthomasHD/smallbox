@@ -1,6 +1,6 @@
 import { normalizeName } from "./chains";
 import { haversine } from "./geo";
-import type { Confidence, Occurrence, Place, SourceId } from "./types";
+import type { Closure, Confidence, Occurrence, Place, SourceId } from "./types";
 
 /**
  * Fold listings from several sources into one set of places.
@@ -23,8 +23,9 @@ const SOURCE_RANK: Record<SourceId, number> = {
   osm: 1,
   usda: 2,
   google: 3,
-  events: 4,
-  news: 5,
+  directories: 4, // Curated guides — human-edited, but read via extraction.
+  events: 5,
+  news: 6,
 };
 
 const CONFIDENCE_RANK: Record<Confidence, number> = {
@@ -50,7 +51,7 @@ function matchKey(name: string): string {
  * Exact match after stripping filler words, or one name containing the other —
  * "Asheville City Market" vs "Asheville City Market South".
  */
-function namesMatch(a: string, b: string): boolean {
+export function namesMatch(a: string, b: string): boolean {
   const ka = matchKey(a);
   const kb = matchKey(b);
   if (!ka || !kb) return false;
@@ -122,6 +123,31 @@ function combine(primary: Place, secondary: Place): Place {
     source: sources[0].source,
     sourceUrl: primary.sourceUrl ?? secondary.sourceUrl,
   };
+}
+
+/**
+ * Drop places a closure tombstone matches.
+ *
+ * A tombstone's coordinates may only be town-centre precise (a news article
+ * rarely prints the address of the shop that closed), so the match radius is
+ * generous and the name check does the discriminating.
+ */
+export function suppressClosed(
+  places: Place[],
+  closures: Closure[],
+): { places: Place[]; suppressed: number } {
+  if (!closures.length) return { places, suppressed: 0 };
+
+  const kept = places.filter((place) => {
+    const hit = closures.some(
+      (closure) =>
+        haversine(place.lat, place.lon, closure.lat, closure.lon) <=
+          SAME_PLACE_METRES_FUZZY && namesMatch(place.name, closure.name),
+    );
+    return !hit;
+  });
+
+  return { places: kept, suppressed: places.length - kept.length };
 }
 
 export interface MergeResult {

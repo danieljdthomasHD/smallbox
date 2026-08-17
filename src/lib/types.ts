@@ -8,7 +8,14 @@ export type CategoryId =
   | "dairy"
   | "grocery";
 
-export type SourceId = "osm" | "usda" | "google" | "news" | "events" | "community";
+export type SourceId =
+  | "osm"
+  | "usda"
+  | "google"
+  | "directories"
+  | "news"
+  | "events"
+  | "community";
 
 /**
  * A permanent shop keeps regular hours; a popup exists on specific dates only
@@ -98,6 +105,22 @@ export interface Place {
   /** Convenience accessor for `sources[0].source`. */
   source: SourceId;
   sourceUrl?: string;
+}
+
+/**
+ * A signal that a place no longer operates, from a source that knows.
+ *
+ * Google marks listings CLOSED_PERMANENTLY, and news articles report
+ * closures outright. Neither should merely drop its own record — the same
+ * place usually survives as a stale OSM node, and the closure is exactly the
+ * evidence needed to suppress it.
+ */
+export interface Closure {
+  name: string;
+  lat: number;
+  lon: number;
+  source: SourceId;
+  url?: string;
 }
 
 export interface SourceStatus {

@@ -128,6 +128,32 @@ const SHOP_TO_CATEGORY: Record<string, CategoryId> = {
 export const SHOP_VALUES = Object.keys(SHOP_TO_CATEGORY);
 
 /**
+ * Names that mark a shop as selling something other than fresh food.
+ *
+ * The failure this guards against, seen in live Dayton data: "Bud's Corner
+ * Market" (beer and cigarettes), "Exchange Home Store, Class Six" (a military
+ * liquor store tagged shop=supermarket), and Ohio's ubiquitous drive-thru
+ * carryouts. A shop whose name leads with alcohol, tobacco, gas or lottery is
+ * not what someone looking for produce and meat wants, whoever owns it.
+ */
+const NOT_FRESH =
+  /\b(liquor|wine|beer|spirits|class six|tobacco|smoke|vape|cigar|carry.?out|drive.?thru|drive.?through|party store|package store|bottle shop|gas|fuel|lotto|lottery|cellular|dollar|nutrition|supplement|vitamin)s?\b/i;
+
+/** Words in a name that genuinely suggest fresh food is sold. */
+const FRESH_NAME =
+  /grocer|produce|fruit|veg|farm|orchard|creamery|honey|apiary|(?<![-\w])bee(?![-\w])|carnicer|fruter|panader|bodega|mercad|tienda|halal|kosher|butcher|meat|fish|seafood|international|oriental|asian|african|mexican|latino|indian|co.?op/i;
+
+/** Explicit OSM evidence of fresh food, independent of the name. */
+function hasFreshTags(tags: Record<string, string>): boolean {
+  return (
+    tags.organic === "yes" ||
+    tags.organic === "only" ||
+    Boolean(tags["produce"]) ||
+    tags["sells:produce"] === "yes"
+  );
+}
+
+/**
  * Decide which of our categories an OSM element belongs to, or null to drop it.
  *
  * Order matters: an element tagged both `amenity=marketplace` and `shop=farm`
@@ -160,21 +186,37 @@ export function classify(tags: Record<string, string>): CategoryId | null {
   }
 
   const shop = tags.shop;
-  if (shop && shop in SHOP_TO_CATEGORY) {
-    // A "convenience" store only counts if there's a sign it sells fresh food —
-    // otherwise every gas station in the county shows up.
-    if (shop === "convenience") {
-      const sellsFresh =
-        tags.organic === "yes" ||
-        tags.organic === "only" ||
-        Boolean(tags["produce"]) ||
-        /grocer|produce|market|fresh|fruit|veg|farm|carniceria|fruteria|bodega/.test(
-          name,
-        );
-      if (!sellsFresh) return null;
-    }
-    return SHOP_TO_CATEGORY[shop];
+  if (!shop || !(shop in SHOP_TO_CATEGORY)) return null;
+
+  const category = SHOP_TO_CATEGORY[shop];
+  const freshTags = hasFreshTags(tags);
+
+  // A name that leads with alcohol, tobacco, gas or supplements disqualifies
+  // the grocery-shaped categories outright unless the tags explicitly say
+  // fresh food is sold. Dedicated formats (butcher, bakery, greengrocer...)
+  // are exempt: "Smoke House BBQ Butcher" is a butcher.
+  if (category === "grocery" && NOT_FRESH.test(name) && !freshTags) {
+    return null;
   }
 
-  return null;
+  // The loose grocery-family tags need positive evidence of fresh food;
+  // otherwise every corner store and gas-station shop in the county turns up.
+  if (shop === "convenience") {
+    // "Market" or "fresh" in the name is not evidence — Ohio is full of
+    // "So-and-so's Corner Market" stores selling beer and lottery tickets.
+    if (!freshTags && !FRESH_NAME.test(name)) return null;
+  }
+
+  if (shop === "health_food") {
+    // In the US this tag is mostly supplement shops. Keep only the ones that
+    // are demonstrably food stores.
+    if (!freshTags && !FRESH_NAME.test(name)) return null;
+  }
+
+  if (shop === "food" || shop === "general") {
+    // Too vague to trust on their own.
+    if (!freshTags && !FRESH_NAME.test(name)) return null;
+  }
+
+  return category;
 }

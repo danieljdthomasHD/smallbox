@@ -170,6 +170,27 @@ const INTERESTING_TAGS = [
   "cuisine",
 ];
 
+/**
+ * True when the element's own tags say the place no longer operates.
+ *
+ * OSM keeps closed shops around under lifecycle tags rather than deleting
+ * them, and mappers are inconsistent about which one they use — so check all
+ * the common spellings. Stale data with no closure tag at all can't be caught
+ * here; that's what the Google tombstones, news closures and community
+ * reports are for.
+ */
+function isClosedInOsm(tags: Record<string, string>, name: string): boolean {
+  if (tags.disused === "yes" || tags.abandoned === "yes") return true;
+  for (const key of Object.keys(tags)) {
+    if (/^(disused|abandoned|was|closed|demolished|razed|construction):/.test(key)) return true;
+  }
+  if (tags.shop === "vacant") return true;
+  if (tags.opening_hours === "closed" || tags.opening_hours === "off") return true;
+  if (/\((permanently )?closed\)/i.test(name)) return true;
+  if (tags.end_date && Date.parse(tags.end_date) < Date.now()) return true;
+  return false;
+}
+
 export function toPlace(
   element: OverpassElement,
   centerLat: number,
@@ -179,6 +200,7 @@ export function toPlace(
   const name = tags.name?.trim();
   // An unnamed point is not something a person can go and find.
   if (!name) return null;
+  if (isClosedInOsm(tags, name)) return null;
 
   const category = classify(tags);
   if (!category) return null;

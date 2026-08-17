@@ -1,4 +1,4 @@
-import type { Place, SourceId } from "../types";
+import type { Closure, Place, SourceId } from "../types";
 
 export interface ProviderQuery {
   lat: number;
@@ -15,6 +15,8 @@ export interface ProviderQuery {
 
 export interface ProviderResult {
   places: Place[];
+  /** Places this source knows to be closed — used to suppress stale records. */
+  closures?: Closure[];
   /** Set when the provider ran but something went wrong or was skipped. */
   note?: string;
 }

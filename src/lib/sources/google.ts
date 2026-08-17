@@ -1,6 +1,6 @@
 import { assessIndependence } from "../chains";
 import { haversine } from "../geo";
-import type { CategoryId, Place } from "../types";
+import type { CategoryId, Closure, Place } from "../types";
 import { emptyResult, type Provider, type ProviderQuery, type ProviderResult } from "./types";
 
 /**
@@ -130,12 +130,20 @@ export const googleProvider: Provider = {
 
       const payload = (await response.json()) as { places?: GooglePlace[] };
       const places: Place[] = [];
+      const closures: Closure[] = [];
 
       for (const row of payload.places ?? []) {
         const name = row.displayName?.text?.trim();
         const rowLat = row.location?.latitude;
         const rowLon = row.location?.longitude;
         if (!name || rowLat === undefined || rowLon === undefined) continue;
+        if (row.businessStatus === "CLOSED_PERMANENTLY") {
+          // Google is the freshest source on operating status; a permanent
+          // closure here should also take down the stale copy of the same
+          // place that other sources still carry.
+          closures.push({ name, lat: rowLat, lon: rowLon, source: "google" });
+          continue;
+        }
         if (row.businessStatus && row.businessStatus !== "OPERATIONAL") continue;
 
         const category = classifyGoogle(row);
@@ -181,7 +189,7 @@ export const googleProvider: Provider = {
         });
       }
 
-      return { places };
+      return { places, closures };
     } catch (error) {
       return emptyResult(
         `Google Places unavailable: ${error instanceof Error ? error.message : String(error)}`,

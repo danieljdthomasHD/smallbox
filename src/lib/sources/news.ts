@@ -4,7 +4,7 @@ import { assessIndependence } from "../chains";
 import { extractListings, isExtractionEnabled, type ExtractionInput } from "../extract";
 import { haversine } from "../geo";
 import { locateVenue } from "../geocode";
-import type { Occurrence, Place } from "../types";
+import type { Closure, Occurrence, Place } from "../types";
 import { emptyResult, type Provider, type ProviderQuery, type ProviderResult } from "./types";
 
 /**
@@ -195,11 +195,28 @@ export const newsProvider: Provider = {
       );
     }
 
+    // A closure reported in print is evidence against the same place wherever
+    // else it still appears — geocode it into a tombstone rather than
+    // discarding it. This runs before the "nothing found" return below, because
+    // an article reporting only closures is still a result worth acting on.
+    const closures: Closure[] = [];
+    for (const { listing } of extraction.closures) {
+      const point = await locateVenue(listing.venue, areaName, { lat, lon });
+      closures.push({
+        name: listing.name,
+        lat: point.lat,
+        lon: point.lon,
+        source: "news",
+      });
+    }
+
     const extracted = extraction.listings;
     if (extracted.length === 0) {
-      return emptyResult(
-        `Read ${articles.length} article${articles.length === 1 ? "" : "s"}; none named a market here.`,
-      );
+      return {
+        places: [],
+        closures,
+        note: `Read ${articles.length} article${articles.length === 1 ? "" : "s"}; none named an open market here.`,
+      };
     }
 
     const places: Place[] = [];
@@ -232,6 +249,7 @@ export const newsProvider: Provider = {
         lon: point.lon,
         distance,
         address: listing.venue ?? undefined,
+        openingHours: listing.schedule ?? undefined,
         openState: "unknown",
         occurrences,
         description: listing.description,
@@ -254,8 +272,9 @@ export const newsProvider: Provider = {
 
     return {
       places,
+      closures,
       note:
-        places.length === 0
+        places.length === 0 && closures.length === 0
           ? "Local coverage mentioned markets, but none could be placed on the map."
           : undefined,
     };

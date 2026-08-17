@@ -15,7 +15,18 @@ import { emptyResult, type Provider, type ProviderQuery, type ProviderResult } f
  * Set USDA_API_KEY in .env.local to switch it on.
  */
 
-const ENDPOINT = "https://www.usdalocalfoodportal.com/api/farmersmarket/";
+/**
+ * The portal maintains separate directories per market type; the two that
+ * match this app are queried together. (It also has CSA and food-hub
+ * directories, which are subscriptions and wholesale rather than places a
+ * person walks into.)
+ */
+const DIRECTORIES = [
+  { path: "farmersmarket", category: "farmers_market" },
+  { path: "onfarmmarket", category: "farm_stand" },
+] as const;
+
+const BASE = "https://www.usdalocalfoodportal.com/api";
 const FETCH_TIMEOUT_MS = 12_000;
 
 interface UsdaMarket {
@@ -45,25 +56,35 @@ async function fetchUsdaMarkets(
     Math.max(1, Math.round(radiusMetres / 1609.344)),
   );
 
-  const url = new URL(ENDPOINT);
-  url.searchParams.set("apikey", apiKey);
-  url.searchParams.set("x", String(lon));
-  url.searchParams.set("y", String(lat));
-  url.searchParams.set("radius", String(radiusMiles));
+  const places: Place[] = [];
+  const failures: string[] = [];
 
-  try {
-    const response = await fetch(url, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-    if (!response.ok) {
-      return emptyResult(`USDA directory returned HTTP ${response.status}.`);
+  for (const directory of DIRECTORIES) {
+    const url = new URL(`${BASE}/${directory.path}/`);
+    url.searchParams.set("apikey", apiKey);
+    url.searchParams.set("x", String(lon));
+    url.searchParams.set("y", String(lat));
+    url.searchParams.set("radius", String(radiusMiles));
+
+    let rows: UsdaMarket[] = [];
+    try {
+      const response = await fetch(url, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        failures.push(`${directory.path}: HTTP ${response.status}`);
+        continue;
+      }
+      const payload = (await response.json()) as { data?: UsdaMarket[] };
+      rows = Array.isArray(payload?.data) ? payload.data : [];
+    } catch (error) {
+      failures.push(
+        `${directory.path}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      continue;
     }
 
-    const payload = (await response.json()) as { data?: UsdaMarket[] };
-    const rows = Array.isArray(payload?.data) ? payload.data : [];
-
-    const places: Place[] = [];
     for (const row of rows) {
       const name = row.listing_name?.trim();
       const rowLat = Number(row.location_y);
@@ -73,11 +94,11 @@ async function fetchUsdaMarkets(
       const tags: Record<string, string> = { name, amenity: "marketplace" };
       if (row.listing_desc) tags.description = row.listing_desc;
 
-      const ref = String(row.listing_id ?? `${rowLat},${rowLon}`);
+      const ref = `${directory.path}/${row.listing_id ?? `${rowLat},${rowLon}`}`;
       places.push({
         id: `usda:${ref}`,
         name,
-        category: "farmers_market",
+        category: directory.category,
         kind: "permanent",
         lat: rowLat,
         lon: rowLon,
@@ -99,11 +120,16 @@ async function fetchUsdaMarkets(
       });
     }
 
-    return { places };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return emptyResult(`USDA directory unavailable: ${message}`);
   }
+
+  if (places.length === 0 && failures.length === DIRECTORIES.length) {
+    return emptyResult(`USDA directories unavailable: ${failures.join("; ")}`);
+  }
+
+  return {
+    places,
+    note: failures.length ? `Partially unavailable (${failures.join("; ")}).` : undefined,
+  };
 }
 
 export const usdaProvider: Provider = {

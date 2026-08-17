@@ -217,6 +217,7 @@ export const eventsProvider: Provider = {
         lon: point.lon,
         distance,
         address: listing.venue ?? known?.venue,
+        openingHours: listing.schedule ?? undefined,
         openState: "unknown",
         occurrences: occurrences.length ? occurrences : undefined,
         description: listing.description,

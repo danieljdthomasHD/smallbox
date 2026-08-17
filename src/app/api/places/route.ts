@@ -5,7 +5,7 @@ import { penalizeRepeatedNames } from "@/lib/chains";
 import { findCorrections } from "@/lib/db";
 import { clampRadius, isValidLatLon } from "@/lib/geo";
 import { reverseGeocode } from "@/lib/geocode";
-import { mergePlaces } from "@/lib/merge";
+import { mergePlaces, suppressClosed } from "@/lib/merge";
 import { gather } from "@/lib/sources/registry";
 import type { CategoryId, Place, PlacesResponse, SourceId } from "@/lib/types";
 
@@ -20,6 +20,7 @@ const KNOWN_SOURCES: SourceId[] = [
   "osm",
   "usda",
   "google",
+  "directories",
   "news",
   "events",
   "community",
@@ -148,7 +149,10 @@ export async function GET(request: Request) {
     }
   }
 
-  const { places: raw, statuses } = await gather({ lat, lon, radius, areaName }, only);
+  const { places: raw, closures, statuses } = await gather(
+    { lat, lon, radius, areaName },
+    only,
+  );
 
   if (raw.length === 0 && statuses.every((s) => s.found === 0)) {
     const osm = statuses.find((s) => s.source === "osm");
@@ -172,7 +176,16 @@ export async function GET(request: Request) {
     );
   }
 
-  const corrected = applyCorrections(deduped);
+  // A source that knows a place closed takes down every copy of it, including
+  // the stale OSM record that would otherwise keep resurfacing.
+  const afterClosures = suppressClosed(deduped, closures);
+  if (afterClosures.suppressed > 0) {
+    warnings.push(
+      `${afterClosures.suppressed} listing${afterClosures.suppressed === 1 ? "" : "s"} removed as permanently closed.`,
+    );
+  }
+
+  const corrected = applyCorrections(afterClosures.places);
   let places = corrected.places;
 
   // Needs the full set to count how often each name occurs.

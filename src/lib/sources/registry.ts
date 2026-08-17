@@ -1,5 +1,6 @@
-import type { Place, SourceId, SourceStatus } from "../types";
+import type { Closure, Place, SourceId, SourceStatus } from "../types";
 import { communityProvider } from "./community";
+import { directoriesProvider } from "./directories";
 import { eventsProvider } from "./events";
 import { googleProvider } from "./google";
 import { newsProvider } from "./news";
@@ -20,6 +21,7 @@ export const PROVIDERS: Provider[] = [
   communityProvider,
   usdaProvider,
   googleProvider,
+  directoriesProvider,
   newsProvider,
   eventsProvider,
 ];
@@ -30,6 +32,7 @@ export const PROVIDERS_BY_ID = new Map<SourceId, Provider>(
 
 export interface GatherResult {
   places: Place[];
+  closures: Closure[];
   statuses: SourceStatus[];
 }
 
@@ -64,6 +67,7 @@ export async function gather(
   );
 
   const places: Place[] = [];
+  const closures: Closure[] = [];
   const statuses: SourceStatus[] = [];
 
   settled.forEach((outcome, index) => {
@@ -87,6 +91,7 @@ export async function gather(
 
     const { result } = outcome.value;
     places.push(...result.places);
+    closures.push(...(result.closures ?? []));
     statuses.push({
       source: provider.id,
       enabled: provider.isEnabled(),
@@ -95,5 +100,5 @@ export async function gather(
     });
   });
 
-  return { places, statuses };
+  return { places, closures, statuses };
 }

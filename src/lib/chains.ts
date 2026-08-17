@@ -157,6 +157,14 @@ const CHAIN_SUBSTRINGS: string[] = [
   "five below",
   "bj s wholesale",
   "bjs wholesale",
+  "rural king",
+  "tractor supply",
+  "family farm and home",
+  "atwoods",
+  "orscheln",
+  "wilco farm",
+  "gnc",
+  "vitamin shoppe",
 ];
 
 /**

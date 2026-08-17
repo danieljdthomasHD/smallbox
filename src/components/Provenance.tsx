@@ -8,6 +8,7 @@ export const SOURCE_LABEL: Record<SourceId, string> = {
   osm: "OpenStreetMap",
   usda: "USDA directory",
   google: "Google",
+  directories: "Market directories",
   news: "Local news",
   events: "Events listing",
   community: "Community",

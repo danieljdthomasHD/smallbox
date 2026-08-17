@@ -146,3 +146,10 @@ test("an independent verdict is never marked definitive", () => {
   assert.equal(v.independent, true);
   assert.notEqual(v.definitive, true);
 });
+
+test("farm-supply chains are not farm stands", () => {
+  // Live Dayton data: "Rural king" mistagged shop=farm with no brand tag.
+  const v = verdict({ name: "Rural king", shop: "farm" });
+  assert.equal(v.independent, false);
+  assert.equal(v.definitive, true);
+});

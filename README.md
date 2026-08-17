@@ -48,7 +48,8 @@ Six sources are queried in parallel and merged into one result set.
 | **OpenStreetMap** (Overpass) | no | The backbone. Global, and the only source carrying the brand tags the chain filter relies on. |
 | **Community submissions** | no | Places people added through the app, and corrections to everything else. Outranks every automated source. |
 | **USDA Local Food Directory** | `USDA_API_KEY` (free) | Curated US farmers markets, with better schedules than OSM. |
-| **Google Places** | `GOOGLE_PLACES_API_KEY` (billed) | Best coverage and opening hours. Never written to the database — their terms restrict storing results. |
+| **Google Places** | `GOOGLE_PLACES_API_KEY` (billed) | Best coverage and opening hours. Never written to the database — their terms restrict storing results. Its permanently-closed flags also suppress the same place in every other source. |
+| **Market directories** | `ANTHROPIC_API_KEY` | Curated regional guides (the Edible magazine network, state agriculture pages), read by extraction. The registry of guides lives in `src/lib/sources/directoryRegistry.ts` — adding a region is one entry, not a scraper. |
 | **Local news** | `ANTHROPIC_API_KEY` | Pop-ups, seasonal markets and brand-new openings, read out of Google News coverage. |
 | **Festivals & events** | `TICKETMASTER_API_KEY` (free) + `ANTHROPIC_API_KEY` | Harvest festivals and night markets that include a produce row. |
 
@@ -123,9 +124,28 @@ Pass `?all=1` to the API to see chains flagged instead of removed.
 | Cheese & dairy | `shop=cheese`, `shop=dairy` |
 | Corner grocers | `shop=grocery`, `deli`, `health_food`, `supermarket`, `convenience` |
 
-Restaurants and cafés are never queried. `shop=convenience` is only included when
-something in its tags or name suggests it actually sells fresh food — otherwise
-every gas station in the county turns up.
+Restaurants and cafés are never queried, and the grocery-shaped tags are gated
+hard: a `convenience`, `health_food`, `food` or `general` shop needs positive
+evidence of fresh food (produce/organic tags, or a name like *grocer*,
+*carnicería*, *halal market*), and any grocery-shaped shop whose name leads
+with liquor, carryout, tobacco, gas, dollar or supplements is dropped outright.
+The deliberate cost: a genuinely good store tagged bare `shop=convenience` with
+an uninformative name is invisible until someone adds it in the app, retags it
+on OSM, or the Google source (which types it correctly) is switched on.
+
+**Closed places** are filtered at every layer: OSM lifecycle tags
+(`disused:*`, `end_date`, "(closed)" names), Google's permanently-closed flag
+and closures reported in news coverage — both of which also *suppress* the
+same place's stale record from other sources — and community "permanently
+closed" reports.
+
+### Where farmers markets actually register
+
+The national registration point for US farmers markets is the **USDA Local
+Food Portal** (`usdalocalfoodportal.com`) — markets list themselves there, and
+its farmers-market and on-farm-market directories are both queried once
+`USDA_API_KEY` (free) is set. Regional curated guides fill in what even the
+USDA misses; see `src/lib/sources/directoryRegistry.ts`.
 
 ## API
 
