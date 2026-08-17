@@ -171,13 +171,22 @@ const INTERESTING_TAGS = [
 ];
 
 /**
+ * Prose that states a permanent closure, as mappers actually write it in
+ * note/description tags. Deliberately narrow: "closed on Sundays" and
+ * "closed for renovation" must not match.
+ */
+const CLOSED_PROSE =
+  /\b(permanently closed|closed permanently|closed for good|closed down|out of business|no longer (open|operating|in business)|has closed)\b/i;
+
+/**
  * True when the element's own tags say the place no longer operates.
  *
  * OSM keeps closed shops around under lifecycle tags rather than deleting
  * them, and mappers are inconsistent about which one they use — so check all
- * the common spellings. Stale data with no closure tag at all can't be caught
- * here; that's what the Google tombstones, news closures and community
- * reports are for.
+ * the common spellings, plus the prose ones (a "(closed)" or "- CLOSED" name,
+ * a note saying it went out of business). Stale data with no closure evidence
+ * at all can't be caught here; that's what the Google tombstones, news
+ * closures, community reports and the curated registry are for.
  */
 function isClosedInOsm(tags: Record<string, string>, name: string): boolean {
   if (tags.disused === "yes" || tags.abandoned === "yes") return true;
@@ -187,6 +196,11 @@ function isClosedInOsm(tags: Record<string, string>, name: string): boolean {
   if (tags.shop === "vacant") return true;
   if (tags.opening_hours === "closed" || tags.opening_hours === "off") return true;
   if (/\((permanently )?closed\)/i.test(name)) return true;
+  if (/[-–—:]\s*(permanently\s+)?closed!?\s*$/i.test(name)) return true;
+  if (CLOSED_PROSE.test(name)) return true;
+  if (CLOSED_PROSE.test(tags.note ?? "") || CLOSED_PROSE.test(tags.description ?? "")) {
+    return true;
+  }
   if (tags.end_date && Date.parse(tags.end_date) < Date.now()) return true;
   return false;
 }

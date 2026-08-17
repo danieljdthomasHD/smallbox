@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 
 import { classify } from "@/lib/categories";
+import { registryClosures } from "@/lib/closedRegistry";
 import { toPlace } from "@/lib/overpass";
 import { suppressClosed } from "@/lib/merge";
 import type { Place } from "@/lib/types";
@@ -85,6 +86,40 @@ test("a closure tombstone suppresses the stale record of the same place", () => 
   );
   assert.equal(suppressed, 1);
   assert.deepEqual(places.map((p) => p.name), ["Hilltop Butcher"]);
+});
+
+test("prose closure notes in OSM tags drop a place", () => {
+  const base = { name: "Old Larder", shop: "bakery" };
+  for (const closed of [
+    { ...base, note: "Permanently closed as of May" },
+    { ...base, description: "This shop has closed." },
+    { ...base, name: "Old Larder - CLOSED" },
+    { ...base, name: "Old Larder (out of business)" },
+  ]) {
+    assert.equal(toPlace(osmElement(closed), 35.6, -82.55), null, JSON.stringify(closed));
+  }
+
+  // Hours prose must not be mistaken for a closure.
+  for (const open of [
+    { ...base, note: "Closed on Sundays" },
+    { ...base, description: "Closed for renovation until spring" },
+  ]) {
+    assert.ok(toPlace(osmElement(open), 35.6, -82.55), JSON.stringify(open));
+  }
+});
+
+test("the curated closure registry takes down a stale OSM record", () => {
+  // Real case: Dee Felice Market in Covington, KY closed May 2026, but OSM
+  // way/141875153 still maps it as a live marketplace with no closure tags.
+  const { places, suppressed } = suppressClosed(
+    [
+      place("Dee Felice Market", 39.0845368, -84.5177472),
+      place("Findlay Market", 39.1153, -84.5187),
+    ],
+    registryClosures(),
+  );
+  assert.equal(suppressed, 1);
+  assert.deepEqual(places.map((p) => p.name), ["Findlay Market"]);
 });
 
 test("a tombstone doesn't reach a same-name place across town", () => {

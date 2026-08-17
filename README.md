@@ -135,10 +135,16 @@ an uninformative name is invisible until someone adds it in the app, retags it
 on OSM, or the Google source (which types it correctly) is switched on.
 
 **Closed places** are filtered at every layer: OSM lifecycle tags
-(`disused:*`, `end_date`, "(closed)" names), Google's permanently-closed flag
-and closures reported in news coverage — both of which also *suppress* the
-same place's stale record from other sources — and community "permanently
-closed" reports.
+(`disused:*`, `end_date`, "(closed)" or "- CLOSED" names, "permanently
+closed" notes), Google's permanently-closed flag and closures reported in
+news coverage — both of which also *suppress* the same place's stale record
+from other sources — and community "permanently closed" reports.
+
+For the case none of those can catch — a shop that closed recently, OSM never
+updated, and no other source carries the news — there is a curated closure
+list in `src/lib/closedRegistry.ts`. Each entry cites a source and tombstones
+the place across every provider. (The better long-term fix is always updating
+OpenStreetMap itself; delete the entry once upstream is corrected.)
 
 ### Where farmers markets actually register
 

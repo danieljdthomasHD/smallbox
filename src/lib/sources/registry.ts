@@ -1,3 +1,4 @@
+import { registryClosures } from "../closedRegistry";
 import type { Closure, Place, SourceId, SourceStatus } from "../types";
 import { communityProvider } from "./community";
 import { directoriesProvider } from "./directories";
@@ -67,7 +68,10 @@ export async function gather(
   );
 
   const places: Place[] = [];
-  const closures: Closure[] = [];
+  // Curated, repo-maintained closures apply to every search regardless of
+  // which providers ran — they exist precisely for when no live source
+  // carries the closure.
+  const closures: Closure[] = [...registryClosures()];
   const statuses: SourceStatus[] = [];
 
   settled.forEach((outcome, index) => {
