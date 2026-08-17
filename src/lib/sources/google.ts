@@ -150,6 +150,16 @@ interface GooglePlace {
   businessStatus?: string;
 }
 
+/**
+ * Types broad enough that carrying one proves nothing: Google hangs
+ * food_store on McDonald's and grocery_store on gas stations. These only
+ * count once the disqualifying types have had their say, whereas a specific
+ * format (deli, butcher_shop, cheese_store...) is trusted outright — a
+ * delicatessen is usually ALSO typed sandwich_shop, and the specific type is
+ * the truer identity.
+ */
+const BROAD_TYPES = new Set(["food_store", "grocery_store", "supermarket", "market"]);
+
 export function classifyGoogle(place: GooglePlace): CategoryId | null {
   // A place whose primary identity is one of ours is one of ours, whatever
   // else it does on the side.
@@ -157,8 +167,11 @@ export function classifyGoogle(place: GooglePlace): CategoryId | null {
     return TYPE_TO_CATEGORY[place.primaryType];
   }
   const types = place.types ?? [];
-  // Otherwise, a restaurant/cafe/bar identity disqualifies it before the
-  // secondary types get a say — that's how McDonald's (types include
+  for (const type of types) {
+    if (TYPE_TO_CATEGORY[type] && !BROAD_TYPES.has(type)) return TYPE_TO_CATEGORY[type];
+  }
+  // Only the broad store types are left. A restaurant/cafe/bar/gas identity
+  // disqualifies before they get a say — that's how McDonald's (types include
   // food_store) would end up listed as a corner grocer.
   if (types.some((t) => DISQUALIFYING_TYPES.has(t))) return null;
   for (const type of types) {

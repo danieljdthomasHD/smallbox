@@ -47,6 +47,38 @@ test("a mapped primaryType wins over restaurant-ish side types", () => {
   );
 });
 
+test("a deli whose primaryType is sandwich_shop is still a deli", () => {
+  // Delicatessens routinely get primaryType sandwich_shop from Google, with
+  // deli relegated to the secondary types. The specific format outranks the
+  // restaurant-ish signal.
+  assert.equal(
+    classifyGoogle({
+      primaryType: "sandwich_shop",
+      types: ["sandwich_shop", "deli", "restaurant", "food_store"],
+    }),
+    "grocery",
+  );
+  // A butcher that also does lunch counters, same shape.
+  assert.equal(
+    classifyGoogle({
+      primaryType: "restaurant",
+      types: ["restaurant", "butcher_shop", "food_store"],
+    }),
+    "butcher",
+  );
+});
+
+test("broad store types do not rescue an eat-drink place", () => {
+  // grocery_store on a gas station is Google being generous, not evidence.
+  assert.equal(
+    classifyGoogle({
+      primaryType: "gas_station",
+      types: ["gas_station", "convenience_store", "grocery_store"],
+    }),
+    null,
+  );
+});
+
 test("response-only types still classify what the search returns", () => {
   // seafood_store can't be requested, but it can come back on a fishmonger
   // found via a broader type.
