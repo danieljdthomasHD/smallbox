@@ -67,32 +67,31 @@ const REQUESTED_TYPES = [
 ];
 
 /**
- * Types that mark a place as primarily somewhere to eat, drink or fill the
- * car — not a fresh-food shop. Live Covington data: McDonald's, Coffee
- * Emporium and a cigar bar all arrived carrying store-shaped secondary types.
- * A mapped `primaryType` wins over this list, so a bakery that is also a cafe
- * (most good ones) and a deli that is also a sandwich shop survive.
+ * Google's type sets are generous to the point of comedy — live Covington
+ * data typed Arby's as a deli, Cold Stone Creamery as a bakery and McDonald's
+ * as a food store — so classification runs in tiers:
+ *
+ * 1. A mapped `primaryType` is trusted outright: that's Google's judgement of
+ *    what the place fundamentally is.
+ * 2. HARD types (fast food, ice cream, liquor, gas...) disqualify no matter
+ *    what else is claimed. Arby's carrying `deli` dies here.
+ * 3. Trusted specific formats (deli, butcher_shop, seafood_store...) win over
+ *    the soft restaurant-ish types — a real delicatessen usually arrives as
+ *    primaryType sandwich_shop with deli relegated to the secondary types.
+ *    `bakery` is deliberately NOT trusted as a secondary: every coffee shop
+ *    selling croissants carries it; a real bakery says so in its primaryType.
+ * 4. SOFT eat-drink types (restaurant, cafe, sandwich_shop...) disqualify
+ *    whatever's left, so the broad store types (food_store, grocery_store)
+ *    only ever classify places with no eat-drink identity at all.
  */
-const DISQUALIFYING_TYPES = new Set([
-  "restaurant",
+const HARD_TYPES = new Set([
   "fast_food_restaurant",
   "hamburger_restaurant",
   "pizza_restaurant",
-  "sandwich_shop",
-  "cafe",
-  "cafeteria",
-  "coffee_shop",
-  "tea_house",
-  "bar",
-  "pub",
-  "wine_bar",
-  "night_club",
-  "meal_takeaway",
   "meal_delivery",
   "ice_cream_shop",
   "dessert_shop",
   "donut_shop",
-  "bagel_shop",
   "candy_store",
   "chocolate_shop",
   "juice_shop",
@@ -101,6 +100,36 @@ const DISQUALIFYING_TYPES = new Set([
   "gas_station",
   "cigar_shop",
   "tobacco_shop",
+  "bar",
+  "pub",
+  "wine_bar",
+  "night_club",
+]);
+
+const SOFT_TYPES = new Set([
+  "restaurant",
+  "sandwich_shop",
+  "cafe",
+  "cafeteria",
+  "coffee_shop",
+  "tea_house",
+  "meal_takeaway",
+  "bagel_shop",
+]);
+
+/** Specific formats trusted even alongside soft restaurant-ish types. */
+const TRUSTED_SECONDARY = new Set([
+  "farmers_market",
+  "deli",
+  "butcher_shop",
+  "seafood_store",
+  "fish_store",
+  "cheese_store",
+  "fruit_and_vegetable_store",
+  "greengrocer",
+  "organic_food_store",
+  "asian_grocery_store",
+  "health_food_store",
 ]);
 
 /**
@@ -150,30 +179,18 @@ interface GooglePlace {
   businessStatus?: string;
 }
 
-/**
- * Types broad enough that carrying one proves nothing: Google hangs
- * food_store on McDonald's and grocery_store on gas stations. These only
- * count once the disqualifying types have had their say, whereas a specific
- * format (deli, butcher_shop, cheese_store...) is trusted outright — a
- * delicatessen is usually ALSO typed sandwich_shop, and the specific type is
- * the truer identity.
- */
-const BROAD_TYPES = new Set(["food_store", "grocery_store", "supermarket", "market"]);
-
 export function classifyGoogle(place: GooglePlace): CategoryId | null {
-  // A place whose primary identity is one of ours is one of ours, whatever
-  // else it does on the side.
   if (place.primaryType && TYPE_TO_CATEGORY[place.primaryType]) {
     return TYPE_TO_CATEGORY[place.primaryType];
   }
   const types = place.types ?? [];
+  if (types.some((t) => HARD_TYPES.has(t))) return null;
   for (const type of types) {
-    if (TYPE_TO_CATEGORY[type] && !BROAD_TYPES.has(type)) return TYPE_TO_CATEGORY[type];
+    if (TRUSTED_SECONDARY.has(type) && TYPE_TO_CATEGORY[type]) {
+      return TYPE_TO_CATEGORY[type];
+    }
   }
-  // Only the broad store types are left. A restaurant/cafe/bar/gas identity
-  // disqualifies before they get a say — that's how McDonald's (types include
-  // food_store) would end up listed as a corner grocer.
-  if (types.some((t) => DISQUALIFYING_TYPES.has(t))) return null;
+  if (types.some((t) => SOFT_TYPES.has(t))) return null;
   for (const type of types) {
     if (TYPE_TO_CATEGORY[type]) return TYPE_TO_CATEGORY[type];
   }
@@ -209,6 +226,10 @@ export const googleProvider: Provider = {
         body: JSON.stringify({
           includedTypes: REQUESTED_TYPES,
           maxResultCount: MAX_RESULTS,
+          // The default ranking is prominence, which spends the 20-result cap
+          // on the most famous places in range. Closest-first is the right
+          // spend for finding the small shops this app exists for.
+          rankPreference: "DISTANCE",
           locationRestriction: {
             circle: {
               center: { latitude: lat, longitude: lon },

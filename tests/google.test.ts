@@ -68,6 +68,38 @@ test("a deli whose primaryType is sandwich_shop is still a deli", () => {
   );
 });
 
+test("fast food carrying deli is still fast food", () => {
+  // Live Covington data: Arby's arrives typed as a deli. The hard fast-food
+  // identity has to beat the trusted-secondary rule.
+  assert.equal(
+    classifyGoogle({
+      primaryType: "fast_food_restaurant",
+      types: ["fast_food_restaurant", "sandwich_shop", "deli", "restaurant"],
+    }),
+    null,
+  );
+});
+
+test("ice cream and coffee shops carrying bakery are not bakeries", () => {
+  // Live Covington data: Cold Stone Creamery, Graeter's and Coffee Emporium
+  // all carry a secondary bakery type. A real bakery says bakery in its
+  // primaryType instead.
+  assert.equal(
+    classifyGoogle({
+      primaryType: "ice_cream_shop",
+      types: ["ice_cream_shop", "dessert_shop", "bakery"],
+    }),
+    null,
+  );
+  assert.equal(
+    classifyGoogle({
+      primaryType: "coffee_shop",
+      types: ["coffee_shop", "cafe", "bakery", "food_store"],
+    }),
+    null,
+  );
+});
+
 test("broad store types do not rescue an eat-drink place", () => {
   // grocery_store on a gas station is Google being generous, not evidence.
   assert.equal(
