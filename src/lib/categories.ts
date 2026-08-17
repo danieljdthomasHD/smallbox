@@ -143,6 +143,15 @@ const NOT_FRESH =
 const FRESH_NAME =
   /grocer|produce|fruit|veg|farm|orchard|creamery|honey|apiary|(?<![-\w])bee(?![-\w])|carnicer|fruter|panader|bodega|mercad|tienda|halal|kosher|butcher|meat|fish|seafood|international|oriental|asian|african|mexican|latino|indian|co.?op/i;
 
+/**
+ * True when a shop's name disqualifies it as a fresh-food stop. Shared with
+ * providers whose records carry no OSM tags (Google), so the same store can't
+ * be rejected in one lane and admitted through another.
+ */
+export function nameSaysNotFresh(name: string): boolean {
+  return NOT_FRESH.test(name);
+}
+
 /** Explicit OSM evidence of fresh food, independent of the name. */
 function hasFreshTags(tags: Record<string, string>): boolean {
   return (

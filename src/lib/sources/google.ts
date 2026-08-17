@@ -1,3 +1,4 @@
+import { nameSaysNotFresh } from "../categories";
 import { assessIndependence } from "../chains";
 import { haversine } from "../geo";
 import type { CategoryId, Closure, Place } from "../types";
@@ -46,7 +47,12 @@ const TYPE_TO_CATEGORY: Record<string, CategoryId> = {
  * cheese_store, fruit_and_vegetable_store...) appear in responses only, and
  * putting one in `includedTypes` fails the whole request with
  * "Unsupported types". Those shops still arrive here — a fishmonger also
- * carries food_store — and the response-only type then classifies it above.
+ * carries a broader store type — and the response-only type classifies it.
+ *
+ * `food_store` is deliberately not requested even though it's legal: Google
+ * applies it to fast food and coffee shops too, and with a 20-result cap the
+ * junk crowds out real shops. It stays in the map above so it can still
+ * classify a place that arrives via another requested type.
  */
 const REQUESTED_TYPES = [
   "farmers_market",
@@ -55,11 +61,47 @@ const REQUESTED_TYPES = [
   "bakery",
   "grocery_store",
   "supermarket",
-  "food_store",
   "deli",
   "health_food_store",
   "asian_grocery_store",
 ];
+
+/**
+ * Types that mark a place as primarily somewhere to eat, drink or fill the
+ * car — not a fresh-food shop. Live Covington data: McDonald's, Coffee
+ * Emporium and a cigar bar all arrived carrying store-shaped secondary types.
+ * A mapped `primaryType` wins over this list, so a bakery that is also a cafe
+ * (most good ones) and a deli that is also a sandwich shop survive.
+ */
+const DISQUALIFYING_TYPES = new Set([
+  "restaurant",
+  "fast_food_restaurant",
+  "hamburger_restaurant",
+  "pizza_restaurant",
+  "sandwich_shop",
+  "cafe",
+  "cafeteria",
+  "coffee_shop",
+  "tea_house",
+  "bar",
+  "pub",
+  "wine_bar",
+  "night_club",
+  "meal_takeaway",
+  "meal_delivery",
+  "ice_cream_shop",
+  "dessert_shop",
+  "donut_shop",
+  "bagel_shop",
+  "candy_store",
+  "chocolate_shop",
+  "juice_shop",
+  "liquor_store",
+  "convenience_store",
+  "gas_station",
+  "cigar_shop",
+  "tobacco_shop",
+]);
 
 /**
  * Google bills Places (New) by which fields a request asks for, and the tiers
@@ -108,11 +150,18 @@ interface GooglePlace {
   businessStatus?: string;
 }
 
-function classifyGoogle(place: GooglePlace): CategoryId | null {
+export function classifyGoogle(place: GooglePlace): CategoryId | null {
+  // A place whose primary identity is one of ours is one of ours, whatever
+  // else it does on the side.
   if (place.primaryType && TYPE_TO_CATEGORY[place.primaryType]) {
     return TYPE_TO_CATEGORY[place.primaryType];
   }
-  for (const type of place.types ?? []) {
+  const types = place.types ?? [];
+  // Otherwise, a restaurant/cafe/bar identity disqualifies it before the
+  // secondary types get a say — that's how McDonald's (types include
+  // food_store) would end up listed as a corner grocer.
+  if (types.some((t) => DISQUALIFYING_TYPES.has(t))) return null;
+  for (const type of types) {
     if (TYPE_TO_CATEGORY[type]) return TYPE_TO_CATEGORY[type];
   }
   return null;
@@ -187,6 +236,9 @@ export const googleProvider: Provider = {
 
         const category = classifyGoogle(row);
         if (!category) continue;
+        // Same rule as the OSM lane: a grocery-shaped listing whose name leads
+        // with liquor, carryout, tobacco, gas or supplements isn't fresh food.
+        if (category === "grocery" && nameSaysNotFresh(name)) continue;
 
         const hours = row.regularOpeningHours?.weekdayDescriptions?.join("; ");
 
